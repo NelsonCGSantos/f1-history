@@ -3,21 +3,43 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Driver extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
-        'driver_id', 'given_name', 'family_name',
-        'date_of_birth', 'nationality',
+        'driver_number',
+        'name',
+        'team_name',
+        'nationality',
+        'abbreviation',
     ];
 
-    public function results()
+    // Relationships
+    public function laps()
     {
-        return $this->hasMany(Result::class, 'driver_id', 'driver_id');
+        return $this->hasMany(Lap::class);
     }
 
-    public function championships()
+    public function positions()
     {
-        return $this->hasMany(Season::class, 'champion_driver_id', 'driver_id');
+        return $this->hasMany(Position::class);
+    }
+
+    public function stints()
+    {
+        return $this->hasMany(Stint::class);
+    }
+
+    public function carData()
+    {
+        return $this->hasMany(CarData::class);
+    }
+
+    public function intervals()
+    {
+        return $this->hasMany(Interval::class);
     }
 }
