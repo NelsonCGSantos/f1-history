@@ -20,12 +20,16 @@ class ImportF1Data extends Command
 
         $meetingsCount = $importer->importMeetingsWithSessions($season);
         $driversCount = $importer->importDrivers($season);
+        $lapsCount = $importer->importLapsForSeason($season);
 
 
         $this->info("✅ Imported $meetingsCount meetings (with sessions)");
         $this->info("✅ Imported $driversCount drivers");
+        $this->info("✅ Imported $lapsCount lap records");
     } catch (\Exception $e) {
         $this->error("❌ Exception: " . $e->getMessage());
     }
+
+
 }
 }

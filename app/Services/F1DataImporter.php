@@ -7,10 +7,14 @@ use Illuminate\Support\Facades\Http;
 use App\Models\Meeting;
 use App\Models\Session;
 use App\Models\Driver;
+use App\Models\Lap;
 
 class F1DataImporter
 {
-    public function importMeetingsWithSessions($season)
+    /**
+     * Import meetings(GPs) and then their sessions for a given season.
+     */
+    public function importMeetingsWithSessions(int $season): int
     {
         $url = 'https://api.openf1.org/v1/meetings';
         $response = Http::timeout(10)->get($url);
@@ -23,7 +27,7 @@ class F1DataImporter
         $imported = 0;
 
         foreach ($meetings as $meeting) {
-            if (($meeting['year'] ?? null) != $season) {
+            if (($meeting['year'] ?? null) !== $season) {
                 continue;
             }
 
@@ -46,7 +50,10 @@ class F1DataImporter
         return $imported;
     }
 
-    private function importSessionsForMeeting($meetingId, $meetingKey)
+    /**
+     * Import sessions for a specific meeting (GP).
+     */
+    private function importSessionsForMeeting(int $meetingId, int $meetingKey): void
     {
         $url = "https://api.openf1.org/v1/sessions?meeting_key={$meetingKey}";
         $response = Http::timeout(10)->get($url);
@@ -57,19 +64,17 @@ class F1DataImporter
         }
 
         $sessions = $response->json();
-
         if (!is_array($sessions)) {
             Log::error("Unexpected sessions format for meeting {$meetingKey}: " . gettype($sessions));
             return;
         }
-
         if (empty($sessions)) {
             Log::info("No sessions found for meeting {$meetingKey}");
             return;
         }
 
         foreach ($sessions as $session) {
-            if (!isset($session['session_key'])) {
+            if (empty($session['session_key'])) {
                 Log::warning("Skipping session with missing key for meeting {$meetingKey}");
                 continue;
             }
@@ -78,21 +83,20 @@ class F1DataImporter
                 ['session_key' => $session['session_key']],
                 [
                     'meeting_id' => $meetingId,
-                    'type'       => $session['session_type'] ?? null,
+                    'type' => $session['session_type'] ?? null,
                     'start_time' => $session['date_start'] ?? null,
-                    'end_time'   => $session['date_end'] ?? null,
+                    'end_time' => $session['date_end'] ?? null,
                 ]
             );
         }
     }
 
-    public function importDrivers($season)
+    /**
+     * Import unique drivers for every session in the season.
+     */
+    public function importDrivers(int $season): int
     {
-        // Fetch all sessions for the given season
-        $sessions = Session::whereHas('meeting', function ($query) use ($season) {
-            $query->where('season_year', $season);
-        })->get();
-
+        $sessions = Session::whereHas('meeting', fn($q) => $q->where('season_year', $season))->get();
         $seenDriverNumbers = [];
         $count = 0;
 
@@ -121,9 +125,9 @@ class F1DataImporter
                 Driver::updateOrCreate(
                     ['driver_number' => $driverNumber],
                     [
-                        'name'         => $driver['full_name'] ?? trim(($driver['first_name'] ?? '') . ' ' . ($driver['last_name'] ?? '')),
-                        'team_name'    => $driver['team_name'] ?? null,
-                        'nationality'  => $driver['country_code'] ?? null,
+                        'name' => $driver['full_name'] ?? trim((($driver['first_name'] ?? '') . ' ' . ($driver['last_name'] ?? ''))),
+                        'team_name' => $driver['team_name'] ?? null,
+                        'nationality' => $driver['country_code'] ?? null,
                         'abbreviation' => $driver['name_acronym'] ?? null,
                     ]
                 );
@@ -135,4 +139,71 @@ class F1DataImporter
 
         return $count;
     }
+
+    /**
+ * Import all lap times and extra details for every session in a given season.
+ */
+public function importLapsForSeason(int $season): int
+{
+    $sessions = Session::whereHas('meeting', fn($q) => $q->where('season_year', $season))
+                       ->get();
+
+    $imported = 0;
+
+    foreach ($sessions as $session) {
+        $key = $session->session_key;
+        $response = Http::timeout(10)->get("https://api.openf1.org/v1/laps?session_key={$key}");
+
+        if ($response->failed()) {
+            Log::warning("Failed to fetch laps for session {$key}");
+            continue;
+        }
+
+        $laps = $response->json();
+        if (!is_array($laps)) {
+            Log::warning("Unexpected laps format for session {$key}");
+            continue;
+        }
+
+        foreach ($laps as $lap) {
+            if (!isset($lap['lap_number'], $lap['driver_number'], $lap['lap_duration'])) {
+                Log::warning("Skipping malformed lap for session {$key}: " . json_encode($lap));
+                continue;
+            }
+
+            // **LOOK UP the real Eloquent driver record**
+            $driver = Driver::where('driver_number', $lap['driver_number'])->first();
+            if (! $driver) {
+                Log::warning("Driver #{$lap['driver_number']} not found — skipping lap.");
+                continue;
+            }
+
+            Lap::updateOrCreate(
+                [
+                  'session_id' => $session->id,
+                  'driver_id'  => $driver->id,              // ← use the PK, not driver_number
+                  'lap_number' => $lap['lap_number'],
+                ],
+                [
+                  'lap_time'        => $lap['lap_duration'],
+                  'sector_1_time'   => $lap['duration_sector_1']      ?? null,
+                  'sector_2_time'   => $lap['duration_sector_2']      ?? null,
+                  'sector_3_time'   => $lap['duration_sector_3']      ?? null,
+                  'i1_speed'        => $lap['i1_speed']              ?? null,
+                  'i2_speed'        => $lap['i2_speed']              ?? null,
+                  'speed_trap'      => $lap['st_speed']              ?? null,
+                  'is_pit_out'      => $lap['is_pit_out_lap']        ?? false,
+                  'segments_sector_1'=> json_encode($lap['segments_sector_1'] ?? []),
+                  'segments_sector_2'=> json_encode($lap['segments_sector_2'] ?? []),
+                  'segments_sector_3'=> json_encode($lap['segments_sector_3'] ?? []),
+                ]
+            );
+
+            $imported++;
+        }
+    }
+
+    return $imported;
+}
+
 }
