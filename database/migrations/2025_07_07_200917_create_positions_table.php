@@ -10,22 +10,23 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up(): void
-{
-    Schema::create('positions', function (Blueprint $table) {
-        $table->id(); // PK
+    {
+        Schema::create('positions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('session_id')->constrained();
+            $table->foreignId('driver_id')->constrained();
 
-        $table->foreignId('session_id')->constrained('sessions');
-        $table->foreignId('driver_id')->constrained('drivers');
+            // Use `date` to store the ISO timestamp from the API
+            $table->timestamp('date')->nullable();
 
-        $table->bigInteger('timestamp'); // in ms
-        $table->integer('position');     // track position
+            $table->integer('position');
 
-        $table->timestamps();
+            $table->timestamps();
 
-        $table->index(['session_id', 'driver_id', 'timestamp']); // optimize queries
-    });
-}
-
+            // ensure uniqueness per driver/time
+            $table->unique(['session_id', 'driver_id', 'date']);
+        });
+    }
 
     /**
      * Reverse the migrations.

@@ -10,29 +10,47 @@ use App\Models\Meeting;
 use App\Models\Session;
 use App\Models\Driver;
 use App\Models\Lap;
+use App\Models\Position;
 
 class F1DataImporter
 {
     /**
-     * Fetch an OpenF1 endpoint with 1-hour file-based caching (ignores default driver).
+     * Fetch an OpenF1 endpoint with 1-hour file-based caching.
      *
      * @param  string  $path
      * @return array
      */
     protected function fetchJson(string $path): array
-    {
-        $cacheKey = "openf1:{$path}";
+{
+    $cacheKey = "openf1:{$path}";
 
-        return Cache::store('file')->remember($cacheKey, now()->addHour(), function () use ($path) {
-            $response = Http::timeout(10)->get("https://api.openf1.org/v1/{$path}");
-            return $response->ok() && is_array($response->json())
-                ? $response->json()
-                : [];
-        });
-    }
+    return Cache::store('file')->remember(
+        $cacheKey,
+        now()->addHour(),
+        function () use ($path) {
+            try {
+                // retry up to 2 times, wait 100ms between attempts
+                $response = Http::retry(2, 100)
+                                ->timeout(30)
+                                ->get("https://api.openf1.org/v1/{$path}");
+            } catch (\Throwable $e) {
+                Log::warning("HTTP fetch failed for {$path}: {$e->getMessage()}");
+                return [];
+            }
+
+            if (! $response->ok()) {
+                Log::warning("Non-200 response for {$path}: {$response->status()}");
+                return [];
+            }
+
+            $json = $response->json();
+            return is_array($json) ? $json : [];
+        }
+    );
+}
 
     /**
-     * Import meetings and then their sessions for a given season.
+     * Import meetings and their sessions for a given season.
      */
     public function importMeetingsWithSessions(int $season): int
     {
@@ -44,7 +62,7 @@ class F1DataImporter
                 continue;
             }
 
-            $newMeeting = Meeting::updateOrCreate(
+            $gp = Meeting::updateOrCreate(
                 ['id' => $meeting['meeting_key']],
                 [
                     'name'        => $meeting['meeting_name'],
@@ -62,10 +80,11 @@ class F1DataImporter
                     Log::warning("Skipping malformed session for meeting {$meeting['meeting_key']}");
                     continue;
                 }
+
                 Session::updateOrCreate(
                     ['session_key' => $session['session_key']],
                     [
-                        'meeting_id' => $newMeeting->id,
+                        'meeting_id' => $gp->id,
                         'type'       => $session['session_type'] ?? null,
                         'start_time' => $session['date_start']   ?? null,
                         'end_time'   => $session['date_end']     ?? null,
@@ -91,12 +110,13 @@ class F1DataImporter
         foreach ($sessions as $session) {
             $drivers = $this->fetchJson("drivers?session_key={$session->session_key}");
             foreach ($drivers as $driver) {
-                $number = $driver['driver_number'] ?? null;
-                if (!$number || isset($seen[$number])) {
+                $num = $driver['driver_number'] ?? null;
+                if (!$num || isset($seen[$num])) {
                     continue;
                 }
+
                 Driver::updateOrCreate(
-                    ['driver_number' => $number],
+                    ['driver_number' => $num],
                     [
                         'name'         => $driver['full_name'] ?? trim((($driver['first_name'] ?? '') . ' ' . ($driver['last_name'] ?? ''))),
                         'team_name'    => $driver['team_name']     ?? null,
@@ -104,7 +124,8 @@ class F1DataImporter
                         'abbreviation' => $driver['name_acronym']  ?? null,
                     ]
                 );
-                $seen[$number] = true;
+
+                $seen[$num] = true;
                 $count++;
             }
         }
@@ -123,31 +144,31 @@ class F1DataImporter
         foreach ($sessions as $session) {
             $rows = [];
             $now  = Carbon::now();
-
             $laps = $this->fetchJson("laps?session_key={$session->session_key}");
+
             foreach ($laps as $lap) {
                 if (!isset($lap['lap_number'], $lap['driver_number'], $lap['lap_duration'])) {
                     continue;
                 }
 
-                $driver = Driver::where('driver_number', $lap['driver_number'])->first();
-                if (!$driver) {
+                $drv = Driver::where('driver_number', $lap['driver_number'])->first();
+                if (!$drv) {
                     Log::warning("Driver #{$lap['driver_number']} not found for lap import.");
                     continue;
                 }
 
                 $rows[] = [
                     'session_id'        => $session->id,
-                    'driver_id'         => $driver->id,
+                    'driver_id'         => $drv->id,
                     'lap_number'        => $lap['lap_number'],
                     'lap_time'          => $lap['lap_duration'],
-                    'sector_1_time'     => $lap['duration_sector_1']  ?? null,
-                    'sector_2_time'     => $lap['duration_sector_2']  ?? null,
-                    'sector_3_time'     => $lap['duration_sector_3']  ?? null,
-                    'i1_speed'          => $lap['i1_speed']          ?? null,
-                    'i2_speed'          => $lap['i2_speed']          ?? null,
-                    'speed_trap'        => $lap['st_speed']          ?? null,
-                    'is_pit_out'        => $lap['is_pit_out_lap']    ?? false,
+                    'sector_1_time'     => $lap['duration_sector_1'] ?? null,
+                    'sector_2_time'     => $lap['duration_sector_2'] ?? null,
+                    'sector_3_time'     => $lap['duration_sector_3'] ?? null,
+                    'i1_speed'          => $lap['i1_speed'] ?? null,
+                    'i2_speed'          => $lap['i2_speed'] ?? null,
+                    'speed_trap'        => $lap['st_speed'] ?? null,
+                    'is_pit_out'        => $lap['is_pit_out_lap'] ?? false,
                     'segments_sector_1' => json_encode($lap['segments_sector_1'] ?? []),
                     'segments_sector_2' => json_encode($lap['segments_sector_2'] ?? []),
                     'segments_sector_3' => json_encode($lap['segments_sector_3'] ?? []),
@@ -170,5 +191,44 @@ class F1DataImporter
         }
 
         return $total;
+    }
+
+    /**
+     * Import position data for every session in a given season.
+     */
+    public function importPositionsForSeason(int $season): int
+    {
+        $sessions = Session::whereHas('meeting', fn($q) => $q->where('season_year', $season))->get();
+        $count = 0;
+
+        foreach ($sessions as $session) {
+            $positions = $this->fetchJson("position?session_key={$session->session_key}");
+            foreach ($positions as $pos) {
+                if (!isset($pos['driver_number'], $pos['position'], $pos['date'])) {
+                    continue;
+                }
+
+                $drv = Driver::where('driver_number', $pos['driver_number'])->first();
+                if (!$drv) {
+                    Log::warning("Driver #{$pos['driver_number']} not found for position import.");
+                    continue;
+                }
+
+                $when = Carbon::parse($pos['date']);
+
+                Position::updateOrCreate(
+                    [
+                        'session_id' => $session->id,
+                        'driver_id'  => $drv->id,
+                        'date'       => $when,
+                    ],
+                    ['position' => $pos['position']]
+                );
+
+                $count++;
+            }
+        }
+
+        return $count;
     }
 }
