@@ -11,6 +11,7 @@ use App\Models\Session;
 use App\Models\Driver;
 use App\Models\Lap;
 use App\Models\Position;
+use App\Models\Stint;
 
 class F1DataImporter
 {
@@ -231,4 +232,50 @@ class F1DataImporter
 
         return $count;
     }
+
+    public function importStintsForSession($sessionKey)
+{
+    $url = "https://api.openf1.org/v1/stints?session_key={$sessionKey}";
+    $response = Http::timeout(10)->get($url);
+
+    if ($response->failed()) {
+        throw new \Exception("Failed to fetch stints for session $sessionKey");
+    }
+
+    $stints = $response->json();
+    $count = 0;
+
+    foreach ($stints as $entry) {
+    $driver = Driver::where('driver_number', $entry['driver_number'])->first();
+    $session = Session::where('session_key', $entry['session_key'])->first();
+
+    // Skip if any required data is missing
+    if (
+        !$driver || !$session ||
+        !isset($entry['lap_start'], $entry['lap_end'], $entry['compound'], $entry['stint_number'], $entry['tyre_age_at_start'])
+    ) {
+        continue;
+    }
+
+    Stint::updateOrCreate(
+        [
+            'session_id' => $session->id,
+            'driver_id' => $driver->id,
+            'stint_number' => $entry['stint_number'],
+        ],
+        [
+            'start_lap' => $entry['lap_start'],
+            'end_lap' => $entry['lap_end'],
+            'tire_compound' => $entry['compound'],
+            'tyre_age_at_start' => $entry['tyre_age_at_start'],
+        ]
+    );
+
+    $count++;
+}
+
+
+    return $count;
+}
+
 }

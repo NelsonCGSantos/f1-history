@@ -15,6 +15,8 @@ class Stint extends Model
         'start_lap',
         'end_lap',
         'tire_compound',
+        'stint_number',
+        'tyre_age_at_start',
     ];
 
     public function session()
