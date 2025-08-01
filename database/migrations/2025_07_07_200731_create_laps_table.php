@@ -19,10 +19,11 @@ return new class extends Migration
 
             $table->integer('lap_number');
             // store durations in seconds with millisecond precision
-            $table->decimal('lap_time', 6, 3)->nullable();
-            $table->decimal('sector_1_time', 6, 3)->nullable();
-            $table->decimal('sector_2_time', 6, 3)->nullable();
-            $table->decimal('sector_3_time', 6, 3)->nullable();
+            // allow up to 9999.999 sec in case of long pit/out laps
+            $table->decimal('lap_time',     7, 3)->nullable();
+            $table->decimal('sector_1_time',7, 3)->nullable();
+            $table->decimal('sector_2_time',7, 3)->nullable();
+            $table->decimal('sector_3_time',7, 3)->nullable();
 
             // intermediate speeds
             $table->unsignedInteger('i1_speed')->nullable();
