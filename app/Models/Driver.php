@@ -32,14 +32,4 @@ class Driver extends Model
     {
         return $this->hasMany(Stint::class);
     }
-
-    public function carData()
-    {
-        return $this->hasMany(CarData::class);
-    }
-
-    public function intervals()
-    {
-        return $this->hasMany(Interval::class);
-    }
 }
