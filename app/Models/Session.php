@@ -17,8 +17,28 @@ class Session extends Model
         'end_time',
     ];
 
+    protected $casts = [
+        'start_time' => 'datetime',
+        'end_time'   => 'datetime',
+    ];
+
     public function meeting()
     {
         return $this->belongsTo(Meeting::class);
+    }
+
+    public function laps()
+    {
+        return $this->hasMany(Lap::class);
+    }
+
+    public function positions()
+    {
+        return $this->hasMany(Position::class);
+    }
+
+    public function stints()
+    {
+        return $this->hasMany(Stint::class);
     }
 }

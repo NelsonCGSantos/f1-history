@@ -19,6 +19,7 @@ class SeasonResource extends JsonResource
         return [
             'id'         => $this->id,
             'name'       => $this->name,
+            'season_year'=> $this->season_year,
             'location'   => $this->location,
             'country'    => $this->country,
             'start_date' => optional($this->start_date)->toDateString(),

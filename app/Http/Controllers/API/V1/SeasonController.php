@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Meeting;
 use App\Http\Resources\SeasonResource;
-use Illuminate\Http\Request;
 
 class SeasonController extends Controller
 {
@@ -30,7 +29,10 @@ class SeasonController extends Controller
      */
     public function show($year)
     {
-        $meetings = Meeting::with('sessions')
+        $meetings = Meeting::with(['sessions' => function ($query) {
+                                $query->orderBy('start_time')
+                                      ->withCount(['laps', 'positions', 'stints']);
+                            }])
                            ->where('season_year', $year)
                            ->orderBy('start_date')
                            ->get();

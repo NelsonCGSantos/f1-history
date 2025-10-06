@@ -42,4 +42,26 @@ class Position extends Model
     {
         return $this->belongsTo(Driver::class);
     }
+
+    /**
+     * Retrieve the latest recorded position for each driver in the session.
+     *
+     * @return \Illuminate\Support\Collection<int, array{position:int, recorded_at:\Illuminate\Support\Carbon}>
+     */
+    public static function finalClassificationForSession(int $sessionId)
+    {
+        return static::where('session_id', $sessionId)
+            ->orderBy('driver_id')
+            ->orderByDesc('date')
+            ->get(['driver_id', 'position', 'date'])
+            ->unique('driver_id')
+            ->mapWithKeys(function ($entry) {
+                return [
+                    $entry->driver_id => [
+                        'position'    => (int) $entry->position,
+                        'recorded_at' => $entry->date,
+                    ],
+                ];
+            });
+    }
 }

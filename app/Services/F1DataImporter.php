@@ -22,6 +22,11 @@ class F1DataImporter
     protected array $sessionCache = [];
 
     /**
+     * Maximum number of lap rows to persist per upsert call.
+     */
+    protected int $lapUpsertChunkSize = 500;
+
+    /**
      * Get driver ID by driver_number, with in-memory caching.
      */
     protected function getDriverId(int $driverNumber): ?int
@@ -169,7 +174,9 @@ class F1DataImporter
      */
     public function importLapsForSeason(int $season): int
     {
-        $sessionsMap = Session::pluck('id', 'session_key')->toArray();
+        $sessionsMap = Session::whereHas('meeting', fn($q) => $q->where('season_year', $season))
+                              ->pluck('id', 'session_key')
+                              ->toArray();
         $driversMap  = Driver::pluck('id', 'driver_number')->toArray();
         $total       = 0;
 
@@ -202,19 +209,16 @@ class F1DataImporter
                     'created_at'        => $now,
                     'updated_at'        => $now,
                 ];
+
+                if (count($rows) >= $this->lapUpsertChunkSize) {
+                    $this->upsertLapRows($rows);
+                    $total += count($rows);
+                    $rows = [];
+                }
             }
 
             if ($rows) {
-                Lap::upsert(
-                    $rows,
-                    ['session_id', 'driver_id', 'lap_number'],
-                    [
-                        'lap_time', 'sector_1_time', 'sector_2_time', 'sector_3_time',
-                        'i1_speed', 'i2_speed', 'speed_trap', 'is_pit_out',
-                        'segments_sector_1', 'segments_sector_2', 'segments_sector_3',
-                        'updated_at',
-                    ]
-                );
+                $this->upsertLapRows($rows);
                 $total += count($rows);
             }
         }
@@ -227,7 +231,9 @@ class F1DataImporter
      */
     public function importPositionsForSeason(int $season): int
     {
-        $sessionsMap = Session::pluck('id', 'session_key')->toArray();
+        $sessionsMap = Session::whereHas('meeting', fn($q) => $q->where('season_year', $season))
+                              ->pluck('id', 'session_key')
+                              ->toArray();
         $driversMap  = Driver::pluck('id', 'driver_number')->toArray();
         $count       = 0;
 
@@ -290,5 +296,26 @@ class F1DataImporter
         }
 
         return $count;
+    }
+
+    /**
+     * Persist lap rows using an upsert operation.
+     */
+    protected function upsertLapRows(array $rows): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+
+        Lap::upsert(
+            $rows,
+            ['session_id', 'driver_id', 'lap_number'],
+            [
+                'lap_time', 'sector_1_time', 'sector_2_time', 'sector_3_time',
+                'i1_speed', 'i2_speed', 'speed_trap', 'is_pit_out',
+                'segments_sector_1', 'segments_sector_2', 'segments_sector_3',
+                'updated_at',
+            ]
+        );
     }
 }
