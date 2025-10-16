@@ -6,7 +6,7 @@
 
 ---
 
-> “This app exists because I wanted an excuse to tinker with race data every weekend.” – Nelson
+> This app exists because I wanted an excuse to tinker with race data every weekend
 
 > ⚠️ **Project status:** work-in-progress. Major features are still being built out while the data layer settles in.
 
