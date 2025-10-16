@@ -1,61 +1,102 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+<div align="center">
+    <img src="https://raw.githubusercontent.com/nelsoncgsantos/assets/main/f1-history-banner.png" alt="F1 History banner" width="520">
+    <h1>F1 History</h1>
+    <p>A passion project built from an incurable love of Formula 1.</p>
+</div>
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+---
 
-## About Laravel
+> “This app exists because I wanted an excuse to tinker with race data every weekend.” – Nelson
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> ⚠️ **Project status:** work-in-progress. Major features are still being built out while the data layer settles in.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 🚦 Tech Stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Laravel 11** – API layer, background jobs, caching, blade-powered UI  
+- **MySQL 8** – Long-term store for meetings, sessions, laps, stints, and standings  
+- **Vite + Tailwind CSS + Alpine.js** – Fast, modern frontend with a lightweight sprinkle of interactivity  
+- **Docker / Laravel Sail** – Local environment parity with production  
+- **Testing** – Feature coverage for the public API endpoints via PHPUnit
 
-## Learning Laravel
+All race information comes from the amazing [OpenF1 API](https://api.openf1.org/). They make real timing and classification data freely available—this project just gives it a friendly face.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 🏁 What You Can Do
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+1. **Browse any imported season**  
+   Check the overview, full calendar, race classifications, stints, and driver profiles. All heavy queries are cached server-side for quick navigation.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+2. **Consume the structured API**  
+   Everything powering the UI is exposed under `/api/v1`:
+   - `GET /api/v1/seasons`  
+   - `GET /api/v1/seasons/{year}`  
+   - `GET /api/v1/seasons/{year}/standings`  
+   - `GET /api/v1/races/{meeting}` (+ `/stints`)  
+   - `GET /api/v1/drivers/{number}`
 
-## Laravel Sponsors
+3. **Keep it fresh**  
+   The importer pulls new data season by season. Re-running it is idempotent, so it’s safe to schedule as often as you like.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## 🛠️ Getting Started
 
-### Premium Partners
+These steps assume macOS/Linux. Windows users can lean on WSL2.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+# 1. Clone
+git clone https://github.com/nelsoncgsantos/f1-history.git
+cd f1-history
 
-## Contributing
+# 2. Environment
+cp .env.example .env
+php artisan key:generate
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+# 3. Dependencies
+composer install
+npm install
 
-## Code of Conduct
+# 4. Spin up Sail (Docker)
+./vendor/bin/sail up -d
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# 5. Run migrations
+./vendor/bin/sail artisan migrate
 
-## Security Vulnerabilities
+# 6. Import a season
+./vendor/bin/sail artisan f1:import 2024
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# 7. Start the dev server
+npm run dev
+# → Visit http://localhost
+```
 
-## License
+Need more years? Repeat the import command with any season OpenF1 supports:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+./vendor/bin/sail artisan f1:import 2023
+./vendor/bin/sail artisan f1:import 2022
+```
+
+<div align="center">
+    <img src="resources/screenshot-2025.png" alt="F1 History standings preview" width="900">
+</div>
+
+*Latest standings view (work in progress while the UI continues to evolve).*
+
+## 📦 Build for Production
+
+```bash
+php artisan optimize:clear
+php artisan migrate --force
+php artisan f1:import 2024
+npm run build
+php artisan config:cache
+php artisan route:cache
+```
+
+Point Nginx/Apache at `public/`, ensure `storage/` and `bootstrap/cache/` are writable, and set up a cron entry for `php artisan schedule:run` to keep the active season updated.
+
+## ❤️ Why This Exists
+
+Formula 1 has been my obsession since childhood. This project is a way to explore the data that gets me out of bed on race day, and to share it with other fans who can’t resist comparing stints, lap charts, or that one alternate strategy that almost worked.
+
+Big thanks to [OpenF1](https://api.openf1.org/) for the free and incredibly detailed timing feed. Without them, this project would still be scribbles on pit-wall paper.
+
+Feel free to fork, extend, or just enjoy the history. See you on race day. 🏎️💨
